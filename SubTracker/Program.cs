@@ -22,6 +22,11 @@ namespace SubTracker
                 opt.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
             });
 
+            builder.Services.AddPersistenceLayerIoc(builder.Configuration);
+            builder.Services.AddApplicationLayerIoc();
+            builder.Services.AddSharedLayerIoc(builder.Configuration);
+            builder.Services.AddIdentityLayerIocForApi(builder.Configuration);
+
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddHealthChecks();
             builder.Services.AddAppiVersioningExtension();

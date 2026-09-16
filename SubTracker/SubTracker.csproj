@@ -9,8 +9,19 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.31">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1-Preview.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SubTracker.Core.Application\SubTracker.Core.Application.csproj" />
+    <ProjectReference Include="..\SubTracker.Infrastructure.Identity\SubTracker.Infrastructure.Identity.csproj" />
+    <ProjectReference Include="..\SubTracker.Infrastructure.Persistence\SubTracker.Infrastructure.Persistence.csproj" />
+    <ProjectReference Include="..\SubTracker.Infrastructure.Shared\SubTracker.Infrastructure.Shared.csproj" />
   </ItemGroup>
 
 </Project>
