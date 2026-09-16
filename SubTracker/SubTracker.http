@@ -1,0 +1,6 @@
+@SubTracker_HostAddress = http://localhost:5281
+
+GET {{SubTracker_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
