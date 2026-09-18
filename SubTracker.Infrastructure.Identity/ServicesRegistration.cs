@@ -1,15 +1,17 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SubTracker.Core.Application.Interfaces;
+using SubTracker.Core.Domain.Settings;
 using SubTracker.Infrastructure.Identity.Contexts;
 using SubTracker.Infrastructure.Identity.Entities;
 using SubTracker.Infrastructure.Identity.Helpers;
 using SubTracker.Infrastructure.Identity.Services;
-using SubTracker.Core.Domain.Settings;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace SubTracker.Infrastructure.Identity
 {
@@ -17,6 +19,7 @@ namespace SubTracker.Infrastructure.Identity
     {
         public static void AddIdentityLayerIocForApi(this IServiceCollection services, IConfiguration config)
         {
+            JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
             GeneralConfiguration(services, config);
 
             #region Identity 
@@ -99,6 +102,47 @@ namespace SubTracker.Infrastructure.Identity
                         context.Response.ContentType = "application/json";
                         var result = System.Text.Json.JsonSerializer.Serialize("Acceso denegado. No tiene permisos para realizar esta acción.");
                         return context.Response.WriteAsync(result);
+                    },
+                    OnMessageReceived = context =>
+                    {
+                        if (context.Request.Cookies.ContainsKey("accessToken"))
+                        {
+                            var encryptedToken = context.Request.Cookies["accessToken"];
+                            if (!string.IsNullOrEmpty(encryptedToken))
+                            {
+                                try
+                                {
+                                    var provider = context.HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
+                                    var protector = provider.CreateProtector("SubTracker.JwtCookieProtector");
+
+                                    context.Token = protector.Unprotect(encryptedToken);
+                                }
+                                catch
+                                {
+                                    context.Token = null;
+                                }
+                            }
+                        }
+                        return Task.CompletedTask;
+                    },
+                    OnTokenValidated = async context =>
+                    {
+                        var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AppUser>>();
+                        var userId = context.Principal?.FindFirst("uid")?.Value;
+                        var tokenStamp = context.Principal?.FindFirst("security_stamp")?.Value;
+
+                        if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(tokenStamp))
+                        {
+                            context.Fail("Token no válido o datos insuficientes.");
+                            return;
+                        }
+
+                        var user = await userManager.FindByIdAsync(userId);
+
+                        if (user == null || user.SecurityStamp != tokenStamp)
+                        {
+                            context.Fail("La sesión ha sido revocada o ha expirado.");
+                        }
                     }
                 };
             });

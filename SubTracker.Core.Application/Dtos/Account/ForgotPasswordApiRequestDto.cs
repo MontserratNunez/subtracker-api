@@ -1,4 +1,4 @@
-﻿namespace SubTracker.Core.Application.Dtos.User
+﻿namespace SubTracker.Core.Application.Dtos.Account
 {
     public class ForgotPasswordApiRequestDto
     {

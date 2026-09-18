@@ -1,4 +1,5 @@
-﻿using SubTracker.Core.Application.Dtos.User;
+﻿using SubTracker.Core.Application.Dtos.Account;
+using SubTracker.Core.Application.Dtos.User;
 
 namespace SubTracker.Core.Application.Interfaces
 {
@@ -6,13 +7,12 @@ namespace SubTracker.Core.Application.Interfaces
     {
         Task<UserResponseDto> ConfirmAccountAsync(string userId, string token);
         Task<UserResponseDto> DeleteAsync(string id);
-        Task<EditResponseDto> EditUser(SaveUserDto saveDto, string? origin, bool? isCreated = false, bool? isApi = false);
-        Task<UserResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request, bool? isApi = false);
-        Task<List<UserDto>> GetAllUser(bool? isActive = true);
+        Task<EditResponseDto> EditUser(SaveUserDto saveDto, string? origin, bool? isCreated = false);
+        Task<UserResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request);
         Task<UserDto?> GetUserByEmail(string email);
         Task<UserDto?> GetUserById(string Id);
         Task<UserDto?> GetUserByUserName(string userName);
-        Task<RegisterResponseDto> RegisterUser(SaveUserDto saveDto, string? origin, bool? isApi = false);
+        Task<RegisterResponseDto> RegisterUser(SaveUserDto saveDto, string? origin);
         Task<UserResponseDto> ResetPasswordAsync(ResetPasswordRequestDto request);
     }
 }

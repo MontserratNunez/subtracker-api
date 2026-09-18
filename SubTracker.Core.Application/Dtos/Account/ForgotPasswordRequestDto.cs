@@ -1,8 +1,8 @@
-﻿namespace SubTracker.Core.Application.Dtos.User
+﻿namespace SubTracker.Core.Application.Dtos.Account
 {
     public class ForgotPasswordRequestDto
     {
-        public required string UserName { get; set; }
+        public required string Email { get; set; }
         public required string Origin { get; set; }
     }
 }

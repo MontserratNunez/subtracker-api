@@ -1,4 +1,5 @@
 ﻿using Asp.Versioning;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 
 namespace SubTracker.Extensions
@@ -18,10 +19,35 @@ namespace SubTracker.Extensions
                         foreach (var apiVersion in versionDescriptions)
                         {
                             var url = $"/swagger/{apiVersion.GroupName}/swagger.json";
-                            var name = $"RealEstate API - {apiVersion.GroupName.ToUpperInvariant()}";
+                            var name = $"SubTracker API - {apiVersion.GroupName.ToUpperInvariant()}";
                             opt.SwaggerEndpoint(url, name);
                         }
                     }
+
+                    opt.HeadContent = @"
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            var checkExist = setInterval(function() {
+                                if (window.ui) {
+                                    clearInterval(checkExist);
+                                    
+                                    var config = window.ui.getConfigs();
+                                    config.requestInterceptor = function(req) {
+                                        function getCookie(name) {
+                                            var value = '; ' + document.cookie;
+                                            var parts = value.split('; ' + name + '=');
+                                            if (parts.length === 2) return parts.pop().split(';').shift();
+                                        }
+                                        var token = getCookie('XSRF-TOKEN');
+                                        if (token && req.method !== 'GET') {
+                                            req.headers['X-XSRF-TOKEN'] = decodeURIComponent(token);
+                                        }
+                                        return req;
+                                    };
+                                }
+                            }, 100);
+                        });
+                    </script>";
                 }
                 catch (System.Reflection.ReflectionTypeLoadException ex)
                 {

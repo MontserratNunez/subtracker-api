@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using SubTracker.Core.Application.Dtos.Account;
 using SubTracker.Core.Application.Dtos.Email;
 using SubTracker.Core.Application.Dtos.User;
 using SubTracker.Core.Application.Interfaces;
@@ -20,7 +21,7 @@ namespace SubTracker.Infrastructure.Identity.Services
             _emailService = emailService;
         }
 
-        public virtual async Task<RegisterResponseDto> RegisterUser(SaveUserDto saveDto, string? origin, bool? isApi = false)
+        public virtual async Task<RegisterResponseDto> RegisterUser(SaveUserDto saveDto, string? origin)
         {
             RegisterResponseDto response = new()
             {
@@ -56,38 +57,20 @@ namespace SubTracker.Infrastructure.Identity.Services
                 Email = saveDto.Email,
                 UserName = saveDto.UserName,
                 ProfileImage = saveDto.ProfileImage,
-                EmailConfirmed = false,
-                PhoneNumber = saveDto.Phone
+                EmailConfirmed = false
             };
 
             var result = await _userManager.CreateAsync(user, saveDto.Password);
             if (result.Succeeded)
             {
-                string role = ((Roles)saveDto.Rol).ToString();
-                await _userManager.AddToRoleAsync(user, role);
-
-                if (isApi != null && !isApi.Value)
+                string? verificationToken = await GetVerificationEmailToken(user);
+                await _emailService.SendAsync(new EmailRequestDto()
                 {
-                    string verificationUri = await GetVerificationEmailUri(user, origin ?? "");
-                    await _emailService.SendAsync(new EmailRequestDto()
-                    {
-                        To = saveDto.Email,
-                        HtmlBody = $"Please confirm your account visiting this URL {verificationUri}",
-                        Subject = "Confirm registration"
-                    });
-                }
-                else
-                {
-                    string? verificationToken = await GetVerificationEmailToken(user);
-                    await _emailService.SendAsync(new EmailRequestDto()
-                    {
-                        To = saveDto.Email,
-                        HtmlBody = $"Please confirm your account use this token {verificationToken}",
-                        Subject = "Confirm registration"
-                    });
-                }
+                    To = saveDto.Email,
+                    HtmlBody = $"Please confirm your account use this token {verificationToken}",
+                    Subject = "Confirm registration"
+                });
 
-                var rolesList = await _userManager.GetRolesAsync(user);
 
                 response.Id = user.Id;
                 response.Email = user.Email ?? "";
@@ -95,7 +78,6 @@ namespace SubTracker.Infrastructure.Identity.Services
                 response.Name = user.Name;
                 response.LastName = user.LastName;
                 response.IsVerified = user.EmailConfirmed;
-                response.Roles = rolesList.ToList();
 
                 return response;
             }
@@ -107,7 +89,7 @@ namespace SubTracker.Infrastructure.Identity.Services
             }
         }
 
-        public virtual async Task<EditResponseDto> EditUser(SaveUserDto saveDto, string? origin, bool? isCreated = false, bool? isApi = false)
+        public virtual async Task<EditResponseDto> EditUser(SaveUserDto saveDto, string? origin, bool? isCreated = false)
         {
             bool isNotcreated = !isCreated ?? false;
             EditResponseDto response = new()
@@ -152,7 +134,6 @@ namespace SubTracker.Infrastructure.Identity.Services
             user.ProfileImage = string.IsNullOrWhiteSpace(saveDto.ProfileImage) ? user.ProfileImage : saveDto.ProfileImage;
             user.EmailConfirmed = user.EmailConfirmed && user.Email == saveDto.Email;
             user.Email = saveDto.Email;
-            user.PhoneNumber = saveDto.Phone;
 
             if (!string.IsNullOrWhiteSpace(saveDto.Password) && isNotcreated)
             {
@@ -170,37 +151,16 @@ namespace SubTracker.Infrastructure.Identity.Services
             var result = await _userManager.UpdateAsync(user);
             if (result.Succeeded)
             {
-                var rolesList = await _userManager.GetRolesAsync(user);
-                await _userManager.RemoveFromRolesAsync(user, rolesList.ToList());
-
-                string role = ((Roles)saveDto.Rol).ToString();
-                await _userManager.AddToRoleAsync(user, role);
-
                 if (!user.EmailConfirmed && isNotcreated)
                 {
-                    if (isApi != null && !isApi.Value)
+                    string? verificationToken = await GetVerificationEmailToken(user);
+                    await _emailService.SendAsync(new EmailRequestDto()
                     {
-                        string verificationUri = await GetVerificationEmailUri(user, origin ?? "");
-                        await _emailService.SendAsync(new EmailRequestDto()
-                        {
-                            To = saveDto.Email,
-                            HtmlBody = $"Please confirm your account visiting this URL {verificationUri}",
-                            Subject = "Confirm registration"
-                        });
-                    }
-                    else
-                    {
-                        string? verificationToken = await GetVerificationEmailToken(user);
-                        await _emailService.SendAsync(new EmailRequestDto()
-                        {
-                            To = saveDto.Email,
-                            HtmlBody = $"Please confirm your account use this token {verificationToken}",
-                            Subject = "Confirm registration"
-                        });
-                    }
+                        To = saveDto.Email,
+                        HtmlBody = $"Please confirm your account use this token {verificationToken}",
+                        Subject = "Confirm registration"
+                    });
                 }
-
-                var updatedRolesList = await _userManager.GetRolesAsync(user);
 
                 response.Id = user.Id;
                 response.Email = user.Email ?? "";
@@ -219,42 +179,27 @@ namespace SubTracker.Infrastructure.Identity.Services
             }
         }
 
-        public virtual async Task<UserResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request, bool? isApi = false)
+        public virtual async Task<UserResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request)
         {
-            UserResponseDto response = new() { HasError = false, Errors = [] };
+            UserResponseDto response = new() { HasError = false, Errors = [], Message = "If there is an account registered with this email, we have sent an email to reset the password."};
 
-            var user = await _userManager.FindByNameAsync(request.UserName);
+            var user = await _userManager.FindByEmailAsync(request.Email);
 
             if (user == null)
             {
-                response.HasError = true;
-                response.Errors.Add($"There is no acccount registered with this username {request.UserName}");
                 return response;
             }
 
             user.EmailConfirmed = false;
             await _userManager.UpdateAsync(user);
 
-            if (isApi != null && !isApi.Value)
+            string? resetToken = await GetResetPasswordToken(user);
+            await _emailService.SendAsync(new EmailRequestDto()
             {
-                var resetUri = await GetResetPasswordUri(user, request.Origin ?? "");
-                await _emailService.SendAsync(new EmailRequestDto()
-                {
-                    To = user.Email,
-                    HtmlBody = $"Please reset your password account visiting this URL {resetUri}",
-                    Subject = "Reset password"
-                });
-            }
-            else
-            {
-                string? resetToken = await GetResetPasswordToken(user);
-                await _emailService.SendAsync(new EmailRequestDto()
-                {
-                    To = user.Email,
-                    HtmlBody = $"Please reset your password account use this token {resetToken}",
-                    Subject = "Reset password"
-                });
-            }
+                To = user.Email,
+                HtmlBody = $"Please reset your password account use this token {resetToken}",
+                Subject = "Reset password"
+            });
 
             return response;
         }
@@ -321,9 +266,7 @@ namespace SubTracker.Infrastructure.Identity.Services
                 Name = user.Name,
                 UserName = user.UserName ?? "",
                 ProfileImage = user.ProfileImage,
-                Phone = user.PhoneNumber,
                 isVerified = user.EmailConfirmed,
-                Role = rolesList.FirstOrDefault() ?? ""
             };
 
             return userDto;
@@ -347,9 +290,7 @@ namespace SubTracker.Infrastructure.Identity.Services
                 Name = user.Name,
                 UserName = user.UserName ?? "",
                 ProfileImage = user.ProfileImage,
-                Phone = user.PhoneNumber,
                 isVerified = user.EmailConfirmed,
-                Role = rolesList.FirstOrDefault() ?? ""
             };
 
             return userDto;
@@ -373,46 +314,12 @@ namespace SubTracker.Infrastructure.Identity.Services
                 Name = user.Name,
                 UserName = user.UserName ?? "",
                 ProfileImage = user.ProfileImage,
-                Phone = user.PhoneNumber,
                 isVerified = user.EmailConfirmed,
-                Role = rolesList.FirstOrDefault() ?? ""
             };
 
             return userDto;
         }
-        public virtual async Task<List<UserDto>> GetAllUser(bool? isActive = true)
-        {
-            List<UserDto> listUsersDtos = [];
-
-            var users = _userManager.Users;
-
-            if (isActive != null && isActive == true)
-            {
-                users = users.Where(w => w.EmailConfirmed);
-            }
-
-            var listUser = await users.ToListAsync();
-
-            foreach (var item in listUser)
-            {
-                var roleList = await _userManager.GetRolesAsync(item);
-
-                listUsersDtos.Add(new UserDto()
-                {
-                    Id = item.Id,
-                    Email = item.Email ?? "",
-                    LastName = item.LastName,
-                    Name = item.Name,
-                    UserName = item.UserName ?? "",
-                    ProfileImage = item.ProfileImage,
-                    Phone = item.PhoneNumber,
-                    isVerified = item.EmailConfirmed,
-                    Role = roleList.FirstOrDefault() ?? ""
-                });
-            }
-
-            return listUsersDtos;
-        }
+        
         public virtual async Task<UserResponseDto> ConfirmAccountAsync(string userId, string token)
         {
             UserResponseDto response = new() { HasError = false, Errors = [] };

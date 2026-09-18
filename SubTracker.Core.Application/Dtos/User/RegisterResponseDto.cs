@@ -10,6 +10,5 @@
         public bool IsVerified { get; set; }
         public bool HasError { get; set; }
         public required List<string> Errors { get; set; }
-        public List<string>? Roles { get; set; }
     }
 }

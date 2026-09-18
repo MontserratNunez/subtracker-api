@@ -4,6 +4,6 @@ namespace SubTracker.Core.Application.Services
 {
     public class SubscriptionService : ISubscriptionService
     {
-
+        
     }
 }

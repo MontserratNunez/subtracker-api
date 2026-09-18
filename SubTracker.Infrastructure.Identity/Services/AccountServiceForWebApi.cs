@@ -1,28 +1,46 @@
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using SubTracker.Core.Application.Dtos.Account;
+using SubTracker.Core.Application.Dtos.Email;
 using SubTracker.Core.Application.Dtos.User;
 using SubTracker.Core.Application.Interfaces;
 using SubTracker.Core.Domain.Settings;
 using SubTracker.Infrastructure.Identity.Entities;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-
 using System.Text;
 
 namespace SubTracker.Infrastructure.Identity.Services
 {
-    public class AccountServiceForWebApi : BaseAccountService, IAccountServiceForWebApi
+    public class AccountServiceForWebApi : IAccountServiceForWebApi
     {
         private readonly UserManager<AppUser> _userManager;
         private readonly SignInManager<AppUser> _signInManager;
         private readonly JwtSettings _jwtSettings;
-        public AccountServiceForWebApi(UserManager<AppUser> userManager, SignInManager<AppUser> signInManager, IEmailService emailService, IOptions<JwtSettings> jwtSettings)
-            : base(userManager, emailService)
+        private readonly IEmailService _emailService;
+        private readonly IConfiguration _config;
+        private readonly IDataProtector _protector;
+
+        public AccountServiceForWebApi(
+            UserManager<AppUser> userManager, 
+            SignInManager<AppUser> signInManager, 
+            IEmailService emailService, 
+            IOptions<JwtSettings> jwtSettings, 
+            IConfiguration config,
+            IDataProtectionProvider provider
+            )
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _jwtSettings = jwtSettings.Value;
+            _emailService = emailService;
+            _config = config;
+            _protector = provider.CreateProtector("SubTracker.JwtCookieProtector");
         }
         public async Task<LoginResponseForApiDto> AuthenticateAsync(LoginApiDto loginDto)
         {
@@ -50,7 +68,7 @@ namespace SubTracker.Infrastructure.Identity.Services
                 return response;
             }
 
-            var result = await _signInManager.PasswordSignInAsync(user.UserName ?? "", loginDto.Password, false, true);
+            var result = await _signInManager.CheckPasswordSignInAsync(user, loginDto.Password, lockoutOnFailure: true);
 
             if (!result.Succeeded)
             {
@@ -69,15 +87,17 @@ namespace SubTracker.Infrastructure.Identity.Services
             }
 
             JwtSecurityToken jwtSecurityToken = await GenerateJwtToken(user);
+            string rawJwt = new JwtSecurityTokenHandler().WriteToken(jwtSecurityToken);
 
             response.Name = user.Name;
             response.LastName = user.LastName;
-            response.AccessToken = new JwtSecurityTokenHandler().WriteToken(jwtSecurityToken);
+
+            response.AccessToken = _protector.Protect(rawJwt);
 
             return response;
         }
 
-        public override async Task<RegisterResponseDto> RegisterUser(SaveUserDto saveDto, string? origin, bool? isApi = false)
+        public async Task<RegisterResponseDto> RegisterUser(SaveUserDto saveDto)
         {
             RegisterResponseDto response = new()
             {
@@ -106,6 +126,14 @@ namespace SubTracker.Infrastructure.Identity.Services
                 return response;
             }
 
+            var passwordResult = ValidatePasswordStrength(saveDto.Password);
+            if (!passwordResult.IsSuccess)
+            {
+                response.HasError = true;
+                response.Errors.Add(passwordResult.Message);
+                return response;
+            }
+
             AppUser user = new AppUser()
             {
                 Name = saveDto.Name,
@@ -113,14 +141,23 @@ namespace SubTracker.Infrastructure.Identity.Services
                 Email = saveDto.Email,
                 UserName = saveDto.UserName,
                 ProfileImage = saveDto.ProfileImage,
-                EmailConfirmed = true,
-                IsActive = true,
-                PhoneNumber = saveDto.Phone,
+                EmailConfirmed = false,
             };
 
             var result = await _userManager.CreateAsync(user, saveDto.Password);
             if (result.Succeeded)
             {
+                await _userManager.UpdateSecurityStampAsync(user);
+
+                string verificationUri = await GetVerificationEmailUri(user);
+
+                await _emailService.SendAsync(new EmailRequestDto()
+                {
+                    To = saveDto.Email,
+                    HtmlBody = $"Confirma tu cuenta visitando esta URL {verificationUri}",
+                    Subject = "Confirmar registro"
+                });
+
                 response.Id = user.Id;
                 response.Name = user.Name;
                 response.LastName = user.LastName;
@@ -139,34 +176,72 @@ namespace SubTracker.Infrastructure.Identity.Services
             return response;
         }
 
-        public override async Task<EditResponseDto> EditUser(SaveUserDto saveDto, string? origin, bool? isCreated = false, bool? isApi = false)
+        public async Task SignOutAsync(string userId)
         {
-            return await base.EditUser(saveDto, null, isCreated, isApi);
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
+            {
+                await _userManager.UpdateSecurityStampAsync(user);
+            }
         }
+ 
+        public virtual async Task<UserResponseDto> ConfirmAccountAsync(string userId, string token)
+        {
+            UserResponseDto response = new() { HasError = false, Errors = [] };
 
-        public override async Task<UserResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request, bool? isApi = false)
-        { 
-            return await base.ForgotPasswordAsync(request, isApi);
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                response.Message = "There is no acccount registered with this user";
+                response.HasError = true;
+                return response;
+            }
+
+            token = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(token));
+            var result = await _userManager.ConfirmEmailAsync(user, token);
+            if (result.Succeeded)
+            {
+                response.Message = $"Account confirmed for {user.Email}. You can now use the app";
+                response.HasError = false;
+                return response;
+            }
+            else
+            {
+                response.Message = $"An error occurred while confirming this email {user.Email}";
+                response.HasError = true;
+                return response;
+            }
         }
+ 
 
-        #region "private methods"
+        #region "Private methods"
+
+        private async Task<string> GetVerificationEmailUri(AppUser user)
+        {
+            var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+            token = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+
+            string clientUrl = _config["ClientUrl"] ?? throw new InvalidOperationException("ClientUrl is not configured.");
+            var route = "confirm-email";
+
+            var completeUrl = new Uri(string.Concat(clientUrl.TrimEnd('/'), "/", route));
+            var verificationUri = QueryHelpers.AddQueryString(completeUrl.ToString(), "userId", user.Id);
+            
+            return QueryHelpers.AddQueryString(verificationUri, "token", token);
+        }
 
         private async Task<JwtSecurityToken> GenerateJwtToken(AppUser user)
         {
             var userClaims = await _userManager.GetClaimsAsync(user);
-            var roles = await _userManager.GetRolesAsync(user);
 
-            var rolesClaims = new List<Claim>();
-            foreach (var role in roles)
-            {
-                rolesClaims.Add(new Claim("roles", role));
-            }
             var claims = new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub,user.UserName ?? ""),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
-                new Claim("uid",user.Id ?? "")
+                new Claim(ClaimTypes.NameIdentifier, user.Id ?? ""),
+                new Claim("uid",user.Id ?? ""),
+                new Claim("security_stamp", user.SecurityStamp ?? "")
             }.Union(userClaims);
 
             var symmetricSecurityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
@@ -181,6 +256,22 @@ namespace SubTracker.Infrastructure.Identity.Services
             );
 
             return jwtSecurityToken;
+        }
+
+        private (bool IsSuccess, string Message) ValidatePasswordStrength(string password)
+        {
+            var missingCriteria = new List<string>();
+            if (password.Length < 8) missingCriteria.Add("al menos 8 caracteres");
+            if (!password.Any(char.IsUpper)) missingCriteria.Add("una letra mayúscula");
+            if (!password.Any(char.IsLower)) missingCriteria.Add("una letra minúscula");
+            if (!password.Any(char.IsDigit)) missingCriteria.Add("un número");
+            if (!password.Any(c => !char.IsLetterOrDigit(c))) missingCriteria.Add("un carácter especial");
+
+            if (missingCriteria.Any())
+            {
+                return (false, $"La nueva contraseña no cumple las reglas. Falta: {string.Join(", ", missingCriteria)}.");
+            }
+            return (true, string.Empty);
         }
 
         #endregion

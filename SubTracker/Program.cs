@@ -1,4 +1,4 @@
-using RealEstateApi.Extensions;
+using Microsoft.AspNetCore.Mvc;
 using SubTracker.Core.Application;
 using SubTracker.Extensions;
 using SubTracker.Infrastructure.Identity;
@@ -10,13 +10,16 @@ namespace SubTracker
 {
     public class Program
     {
-        public async static void Main(string[] args)
+        public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
 
-            builder.Services.AddControllers()
+            builder.Services.AddControllersWithViews(options =>
+            {
+                options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+            })
             .AddJsonOptions(opt =>
             {
                 opt.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -47,7 +50,7 @@ namespace SubTracker
 
             app.MapControllers();
 
-            await app.RunAsync();
+            app.Run();
         }
     }
 }

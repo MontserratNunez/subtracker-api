@@ -1,7 +1,7 @@
 using Asp.Versioning;
 using Microsoft.OpenApi.Models;
 
-namespace RealEstateApi.Extensions
+namespace SubTracker.Extensions
 {
     public static class ServiceExtension
     {
@@ -20,12 +20,7 @@ namespace RealEstateApi.Extensions
                 {
                     Version = "v1.0",
                     Title = "RealEstate API",
-                    Description = "This Api will be responsible for overall data distribution",
-                    Contact = new OpenApiContact
-                    {
-                        Name = "Montserrat Núñez",
-                        Email = "20251379@itla.edu.do",
-                    }
+                    Description = "This Api will be responsible for overall data distribution"
                 });
                 options.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
                 options.DescribeAllParametersInCamelCase();

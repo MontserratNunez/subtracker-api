@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SubTracker.Core.Application.Dtos.User
+namespace SubTracker.Core.Application.Dtos.Account
 {
     public class LoginApiDto
     {

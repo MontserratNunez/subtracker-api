@@ -7,10 +7,8 @@
         public required string LastName { get; set; }
         public required string Email { get; set; }
         public required string UserName { get; set; }
-        public string? Phone { get; set; }
         public string? ProfileImage { get; set; }
         public bool? isVerified { get; set; }
-        public required string Role { get; set; }
         public bool IsActive { get; set; }
     }
 }

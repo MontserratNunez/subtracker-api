@@ -7,9 +7,7 @@ namespace SubTracker.Infrastructure.Identity.Entities
         public required string Name { get; set; }
         public required string LastName { get; set; }
         public string? ProfileImage { get; set; }
-
         public DateTime? LastModifiedDate { get; set; }
-
         public bool IsActive { get; set; } = true;
     }
 }
