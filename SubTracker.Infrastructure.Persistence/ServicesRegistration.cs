@@ -22,6 +22,7 @@ namespace SubTracker.Infrastructure.Persistence
 
             #region Repositories IOC
             services.AddTransient(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+            services.AddScoped<ISubscriptionCategoryRepository, SubscriptionCategoryRepository>();
             #endregion
         }
     }

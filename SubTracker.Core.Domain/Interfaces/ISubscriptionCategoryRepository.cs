@@ -9,5 +9,7 @@ namespace SubTracker.Core.Domain.Interfaces
 {
     public interface ISubscriptionCategoryRepository : IGenericRepository<SubscriptionCategory>
     {
+        Task<List<SubscriptionCategory>> GetByUserIdAsync(string userId);
+        Task<SubscriptionCategory?> GetByIdAndUserIdAsync(int id, string userId);
     }
 }

@@ -4,14 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SubTracker.Core.Domain.Entities
+namespace SubTracker.Core.Application.Dtos.SubscriptionCategory
 {
-    public class SubscriptionCategory
+    public class SubscriptionCategoryDto
     {
         public int Id { get; set; }
         public required string Name { get; set; }
-        public required string UserId { get; set; }
-        public bool IsDeleted { get; set; }
         public bool IsActive { get; set; }
     }
 }

@@ -17,6 +17,7 @@ namespace SubTracker.Core.Application
             #endregion
             #region Services IOC
             services.AddScoped<ISubscriptionService, SubscriptionService>();
+            services.AddScoped<ISubscriptionCategoryService, SubscriptionCategoryService>();
             #endregion
         }
     }
